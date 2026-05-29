@@ -1,0 +1,53 @@
+name: GitHub Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build + publish release assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust + wasm-pack
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup target add wasm32-unknown-unknown
+          curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build WASM UMD bundle
+        run: |
+          wasm-pack build --target no-modules --release --out-dir pkg-bundler --out-name rhwptopdf
+          node scripts/wrap_umd.mjs pkg-bundler/rhwptopdf.js pkg-bundler/rhwptopdf.umd.js
+          cp pkg-bundler/rhwptopdf_bg.wasm pkg-bundler/rhwptopdf.umd_bg.wasm
+
+      - name: Package release tarball
+        run: |
+          mkdir -p dist
+          tar -czf dist/rhwptopdf-${{ github.ref_name }}.tar.gz \
+            -C pkg-bundler rhwptopdf.umd.js rhwptopdf.umd_bg.wasm rhwptopdf.d.ts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: rhwptopdf ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          files: |
+            pkg-bundler/rhwptopdf.umd.js
+            pkg-bundler/rhwptopdf.umd_bg.wasm
+            pkg-bundler/rhwptopdf.d.ts
+            dist/rhwptopdf-${{ github.ref_name }}.tar.gz
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
