@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust (cargo build + policy tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup target add wasm32-unknown-unknown
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: cargo build (native)
+        run: cargo build --verbose
+
+      - name: cargo build (wasm32-unknown-unknown)
+        run: cargo build --target wasm32-unknown-unknown --verbose
+
+  wasm-pack:
+    name: wasm-pack bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain + wasm-pack
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup target add wasm32-unknown-unknown
+          curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Setup Node.js (for wrap_umd.mjs)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build UMD bundle
+        run: |
+          wasm-pack build --target no-modules --release --out-dir pkg-bundler --out-name rhwptopdf
+          node scripts/wrap_umd.mjs pkg-bundler/rhwptopdf.js pkg-bundler/rhwptopdf.umd.js
+          cp pkg-bundler/rhwptopdf_bg.wasm pkg-bundler/rhwptopdf.umd_bg.wasm
+
+      - name: Verify bundle exists
+        run: |
+          test -f pkg-bundler/rhwptopdf.umd.js
+          test -f pkg-bundler/rhwptopdf.umd_bg.wasm
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rhwptopdf-umd
+          path: |
+            pkg-bundler/rhwptopdf.umd.js
+            pkg-bundler/rhwptopdf.umd_bg.wasm
+          retention-days: 30

@@ -1,0 +1,21 @@
+/target
+Cargo.lock.bak
+*.rs.bk
+.DS_Store
+node_modules/
+pkg/
+pkg-bundler/
+pkg-cdn/
+dist/
+
+# demo: 외부 자원으로 받는 폰트 파일 (저작권/사이즈)
+demo/public/fonts/*.ttf
+demo/public/fonts/*.otf
+demo/public/fonts/*.ttc
+
+.claude/
+ex/
+
+# WSL / Windows
+*:Zone.Identifier
+.lazyweb/

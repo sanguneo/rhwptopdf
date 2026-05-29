@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>rhwptopdf · 브라우저 데모</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <!-- HERO (compact) -->
+      <header class="hero">
+        <p class="eyebrow">Browser demo</p>
+        <h1>HWP 문서를 브라우저에서 바로 PDF 로</h1>
+        <p class="lede">
+          한컴 한글 (.hwp / .hwpx) 파일을 업로드하면, Rust → WebAssembly 엔진이
+          페이지마다 SVG 로 렌더링한 뒤 멀티페이지 PDF 로 조립해 즉시 미리보기와
+          다운로드를 제공합니다. 파일은 브라우저 안에서만 처리됩니다.
+        </p>
+        <p class="hero-meta">
+          <span class="chip"><span class="chip-dot" id="status-dot"></span><span id="status">초기화 대기</span></span>
+          <span class="chip-sep">·</span>
+          <span class="chip-label">엔진</span> <span id="version">—</span>
+        </p>
+      </header>
+
+      <!-- TWO-COLUMN: left controls / right preview -->
+      <section class="workbench">
+        <!-- LEFT: drop zone + primary action + analysis -->
+        <div class="panel controls">
+          <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="HWP 파일 선택">
+            <input
+              id="file-input"
+              type="file"
+              accept=".hwp,.hwpx,application/octet-stream,application/zip"
+              hidden
+            />
+            <div class="dropzone-empty">
+              <div class="dropzone-icon" aria-hidden="true">⬆</div>
+              <div class="dropzone-title">HWP / HWPX 파일을 여기로 드래그</div>
+              <div class="dropzone-sub">또는 <span class="dropzone-browse">클릭하여 선택</span></div>
+            </div>
+            <div class="dropzone-selected" hidden>
+              <div class="dropzone-icon" aria-hidden="true">📄</div>
+              <div class="dropzone-title" id="selected-file">—</div>
+              <button class="dropzone-clear" type="button" id="clear-button">다른 파일</button>
+            </div>
+          </div>
+
+          <button id="convert-button" class="primary-cta" type="button" disabled>
+            <span class="cta-label">PDF 로 변환</span>
+            <span class="cta-arrow" aria-hidden="true">▶</span>
+          </button>
+
+          <!-- Stepper -->
+          <ol class="stepper" id="stepper">
+            <li data-step="analyze"><span class="step-dot"></span><span class="step-label">분석</span></li>
+            <li data-step="fonts"><span class="step-dot"></span><span class="step-label">폰트</span></li>
+            <li data-step="convert"><span class="step-dot"></span><span class="step-label">변환</span></li>
+            <li data-step="done"><span class="step-dot"></span><span class="step-label">완료</span></li>
+          </ol>
+
+          <!-- Analysis details (filled after analyzeHwp) -->
+          <dl class="analysis" id="analysis" hidden>
+            <div>
+              <dt>페이지</dt>
+              <dd id="page-count">—</dd>
+            </div>
+            <div>
+              <dt>요청한 폰트</dt>
+              <dd id="fonts-required">—</dd>
+            </div>
+          </dl>
+
+          <a id="download-link" class="download disabled" aria-disabled="true">
+            <span aria-hidden="true">⬇</span>&nbsp;PDF 다운로드
+          </a>
+        </div>
+
+        <!-- RIGHT: preview -->
+        <div class="panel preview">
+          <h2 class="panel-title">미리보기</h2>
+          <div class="preview-frame-wrap">
+            <div class="preview-placeholder" id="preview-placeholder">
+              <div class="preview-placeholder-icon" aria-hidden="true">📄</div>
+              <p class="preview-placeholder-title">PDF 가 여기에 표시됩니다</p>
+              <p class="preview-placeholder-sub">
+                파일을 선택하고 <strong>PDF 로 변환</strong> 을 누르면 결과가 바로 나타납니다.
+              </p>
+            </div>
+            <iframe id="preview-frame" title="변환된 PDF 미리보기" hidden></iframe>
+          </div>
+        </div>
+      </section>
+
+      <!-- LOG (collapsible) -->
+      <details class="log-panel">
+        <summary>실행 로그 자세히 보기</summary>
+        <pre id="log">데모 페이지가 로드되었습니다.</pre>
+      </details>
+    </main>
+
+    <script src="vendor/rhwptopdf.umd.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

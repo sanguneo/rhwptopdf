@@ -1,0 +1,65 @@
+name: Deploy demo to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build demo site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust + wasm-pack
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup target add wasm32-unknown-unknown
+          curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build WASM bundle
+        run: |
+          wasm-pack build --target no-modules --release --out-dir pkg-bundler --out-name rhwptopdf
+          node scripts/wrap_umd.mjs pkg-bundler/rhwptopdf.js pkg-bundler/rhwptopdf.umd.js
+          cp pkg-bundler/rhwptopdf_bg.wasm pkg-bundler/rhwptopdf.umd_bg.wasm
+
+      - name: Assemble site
+        # demo/public/ 을 site root 로, vendor/ 는 빌드된 UMD 로 갈음.
+        # /fonts/*.ttf 는 .gitignore 라 CI 빌드에는 미존재 — 데모는 시스템 폰트
+        # (Font Access API) 가 우선이라 fallback 폰트 없이도 동작한다.
+        run: |
+          mkdir -p _site
+          cp -r demo/public/* _site/
+          mkdir -p _site/vendor
+          cp pkg-bundler/rhwptopdf.umd.js pkg-bundler/rhwptopdf.umd_bg.wasm _site/vendor/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
