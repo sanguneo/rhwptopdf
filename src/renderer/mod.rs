@@ -13,6 +13,7 @@ pub mod composer;
 pub mod equation;
 pub mod float_placement;
 pub mod font_metrics_data;
+pub(crate) mod hancom_pua;
 pub mod height_cursor;
 pub mod height_measurer;
 pub mod image_resolver;

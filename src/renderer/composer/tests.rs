@@ -909,3 +909,32 @@ fn test_677_effective_text_for_metrics_preserves_f081c_filler() {
         "U+F081C filler 는 0폭 측정 규칙을 유지하기 위해 원문으로 측정해야 함."
     );
 }
+
+/// [rhwp 차용] 한컴 PDF 대조로 검증된 PUA 기호들이 표시 텍스트 확장 경로에서
+/// 공개 글꼴 문자열로 투영되는지 확인한다. 종전 인라인 표는 U+F012B/U+F03C5
+/// 2개만 매핑해, 나머지 검증 기호(글머리표·머리말)는 글머리 fallback 으로
+/// 두부(tofu)/오매핑되었다. 검증 표를 단일 정본으로 확장한 회귀 가드.
+#[test]
+fn test_expand_pua_display_projects_verified_hancom_symbols() {
+    // 기존에 이미 매핑되던 항목(회귀 방지)
+    assert_eq!(expand_pua_display_text("\u{F012B}"), "(인)");
+    assert_eq!(expand_pua_display_text("\u{F03C5}"), "□");
+    // 차용으로 새로 검증 매핑된 항목
+    assert_eq!(expand_pua_display_text("\u{F02FB}"), "▸");
+    assert_eq!(expand_pua_display_text("\u{F02FC}"), "►");
+    assert_eq!(expand_pua_display_text("\u{F031C}"), "■");
+    assert_eq!(expand_pua_display_text("\u{F03A0}"), "↵");
+    // "한글과컴퓨터" 머리말 6글자
+    assert_eq!(
+        expand_pua_display_text("\u{F03EF}\u{F03F0}\u{F03F1}\u{F03F2}\u{F03F3}\u{F03F4}"),
+        "한글과컴퓨터"
+    );
+}
+
+/// 검증되지 않은 인접 PUA 는 검증 표가 임의 매핑하지 않는다(글머리 fallback 경로).
+/// 근거 없는 의미 추정을 막는 계약을 확장 경로 수준에서 고정한다.
+#[test]
+fn test_expand_pua_display_does_not_guess_unverified_pua() {
+    // U+F03E0 은 검증 표에 없음 → pua_plain_text_display 가 None 이어야 한다.
+    assert!(pua_plain_text_display('\u{F03E0}').is_none());
+}

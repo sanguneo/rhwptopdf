@@ -1578,15 +1578,13 @@ fn pua_enclosed_border_type(ch: char) -> Option<u8> {
     None
 }
 
+/// 한컴 PDF 대조로 검증된 PUA 기호를 공개 글꼴 표시 문자열로 투영한다.
+///
+/// 검증 표의 단일 정본은 [`super::hancom_pua`] 다. 코드 포인트 범위만으로
+/// 의미를 추정하지 않고, Hancom PDF 로 확인된 항목만 매핑한다.
+/// (U+F012B "(인)", U+F03C5 "□" 외에 글머리표/머리말 기호 등 포함.)
 fn pua_plain_text_display(ch: char) -> Option<&'static str> {
-    match ch as u32 {
-        0xF012B => Some("(인)"),
-        // [Task #1001] 한컴 변환본 (HWP3→HWP5) 의 글머리표 PUA. 한컴 viewer 는
-        // 빈 체크박스 모양으로 표시. "□" (U+25A1 WHITE SQUARE) 매핑.
-        // 실제 sample16-hwp5 의 PUA codepoint 는 U+F03C5 (글자 분석 결과).
-        0xF03C5 => Some("□"),
-        _ => None,
-    }
+    super::hancom_pua::verified_hancom_pua_display(ch)
 }
 
 /// 일반 텍스트 렌더링/paint contract 경로에서 한컴 PUA 문자를 표시 문자열로 확장한다.
