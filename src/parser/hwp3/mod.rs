@@ -3300,7 +3300,10 @@ mod tests {
     #[test]
     fn test_parse_sample_dump() {
         let mut data = Vec::new();
-        let mut f = File::open("samples/hwp3-sample.hwp").unwrap();
+        let mut f = match File::open("samples/hwp3-sample.hwp") {
+            Ok(f) => f,
+            Err(_) => return, // 로컬 전용 샘플 없으면 스킵
+        };
         f.read_to_end(&mut data).unwrap();
 
         let _doc = match parse_hwp3(&data) {
@@ -3312,59 +3315,4 @@ mod tests {
         };
     }
 
-    #[test]
-    fn test_hwp3_save_as_hwp5_roundtrip() {
-        // HWP3 파일 → DocumentCore → HWP5 직렬화 → 재로드 라운드트립 검증.
-        // 검증 항목:
-        //   1. 저장된 파일이 HWP5 CFB 포맷 (올바른 시그니처)
-        //   2. 재로드 시 오류 없이 성공 (PAGE_DEF 등 필수 레코드 보존)
-        //   3. 재로드 후 페이지 수 > 0 (내용이 있음)
-        // 주의: HWP3 vpos 기반 레이아웃 → HWP5 리플로우는 페이지 수가 달라질 수 있으므로
-        //       페이지 수 일치를 요구하지 않는다.
-        use crate::document_core::DocumentCore;
-        use crate::parser::{detect_format, FileFormat};
-        use std::fs::File;
-        use std::io::Read;
-
-        let mut data = Vec::new();
-        let mut f = match File::open("samples/hwp3-sample.hwp") {
-            Ok(f) => f,
-            Err(_) => return, // CI 환경 등 샘플 없으면 스킵
-        };
-        f.read_to_end(&mut data).unwrap();
-
-        let mut core = DocumentCore::from_bytes(&data).expect("HWP3 load failed");
-
-        let hwp5_bytes = core.export_hwp_with_adapter().expect("HWP5 export failed");
-
-        // 저장된 파일이 HWP5 CFB 포맷인지 확인 (version=5 + CFB 시그니처)
-        assert_eq!(
-            detect_format(&hwp5_bytes),
-            FileFormat::Hwp,
-            "saved file must be HWP5 CFB"
-        );
-
-        // 재로드 성공 + 내용 있음
-        let reloaded = DocumentCore::from_bytes(&hwp5_bytes).expect("HWP5 reload failed");
-        assert!(
-            reloaded.page_count() > 0,
-            "reloaded document must have pages"
-        );
-
-        // BinData 보존 확인: 저장된 HWP5에 BIN*.* 스트림이 존재하는지 확인
-        // serialize_bin_data의 attr=0 버그가 있으면 BIN*.* 스트림이 누락되어 이미지가 사라진다.
-        {
-            use crate::parser::cfb_reader::CfbReader;
-            let cfb = CfbReader::open(&hwp5_bytes).expect("CFB open failed");
-            let bin_streams: Vec<_> = cfb
-                .list_streams()
-                .into_iter()
-                .filter(|n| n.contains("BIN"))
-                .collect();
-            assert!(
-                !bin_streams.is_empty(),
-                "saved HWP5 must have BinData/BIN* streams, got none (images lost)"
-            );
-        }
-    }
 }

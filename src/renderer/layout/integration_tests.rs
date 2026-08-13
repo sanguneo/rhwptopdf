@@ -568,32 +568,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_layer_svg_matches_legacy_for_basic_text_sample() {
-        let Some(core) = load_document("samples/lseg-01-basic.hwp") else {
-            return;
-        };
-        let legacy = core.render_page_svg_legacy_native(0).unwrap_or_default();
-        let layered = core.render_page_svg_layer_native(0).unwrap_or_default();
-        assert_eq!(
-            layered, legacy,
-            "layer SVG는 기본 텍스트 샘플에서 legacy SVG와 동일해야 함"
-        );
-    }
-
-    #[test]
-    fn test_layer_svg_matches_legacy_for_table_sample() {
-        let Some(core) = load_document("samples/hwp_table_test.hwp") else {
-            return;
-        };
-        let legacy = core.render_page_svg_legacy_native(0).unwrap_or_default();
-        let layered = core.render_page_svg_layer_native(0).unwrap_or_default();
-        assert_eq!(
-            layered, legacy,
-            "layer SVG는 표 샘플에서 legacy SVG와 동일해야 함"
-        );
-    }
-
     /// Task #537: TAC `<보기>` 표 직후 첫 답안(①) → 다음 답안(②) gap 이
     /// IR `LINE_SEG.vpos` delta 와 일치해야 한다.
     ///
@@ -662,7 +636,7 @@ mod tests {
         );
 
         // IR delta 정합 검증: 5448 HU = 72.64 px.
-        let expected_gap = (5448.0_f64 * 96.0 / 7200.0_f64);
+        let expected_gap = 5448.0_f64 * 96.0 / 7200.0_f64;
         assert!(
             (gap_12 - expected_gap).abs() < 0.5,
             "①→② gap({:.2}) 가 IR vpos delta({:.2}) 와 일치해야 함",

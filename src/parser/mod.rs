@@ -1304,8 +1304,9 @@ mod tests {
     fn test_parse_document_issue_265_sample() {
         // Issue #265: 실제 제보 파일 samples/issue_265.hwp 가 HWP 3.0 으로
         // 감지되고 정상적으로 파싱되는지 확인.
-        let data = std::fs::read("samples/issue_265.hwp")
-            .expect("samples/issue_265.hwp should exist in repo");
+        let Ok(data) = std::fs::read("samples/issue_265.hwp") else {
+            return; // 로컬 전용 샘플 없으면 스킵
+        };
         assert_eq!(detect_format(&data), FileFormat::Hwp3);
         let doc = parse_document(&data).expect("Should successfully parse HWP3 sample");
         assert!(

@@ -634,24 +634,55 @@ impl LenientCfbReader {
     }
 }
 
+/// CFB 스트림 1개의 압축 해제 결과 상한.
+///
+/// ZIP과 마찬가지로 raw deflate도 높은 압축률을 허용하므로, 수 KB짜리
+/// HWP5 스트림이 수 GB로 팽창하는 "압축 해제 폭탄"을 만들 수 있다.
+/// DocInfo/BodyText/BinData 스트림을 무제한 `read_to_end` 하면 호스트
+/// (특히 32비트 WASM) 프로세스를 OOM으로 몰 수 있다. 실제 HWP5 문서의
+/// 개별 스트림(이미지 BinData 포함)은 충분히 이 한도 아래에 있다.
+///
+/// HWPX 경로의 [`crate::parser::hwpx::reader::MAX_BINDATA_SIZE`] 와 같은
+/// 방어를 HWP5 CFB 경로에도 적용한다.
+pub const MAX_DECOMPRESSED_SIZE: usize = 256 * 1024 * 1024; // 256 MB
+
 /// zlib/deflate 압축 해제
 ///
 /// HWP는 raw deflate (wbits=-15) 사용. 실패 시 표준 zlib도 시도.
+///
+/// 압축 해제 결과는 [`MAX_DECOMPRESSED_SIZE`]로 제한되어, 초과 시
+/// 압축 해제 폭탄으로 간주하고 `DecompressError`를 반환한다.
 pub fn decompress_stream(data: &[u8]) -> Result<Vec<u8>, CfbError> {
+    decompress_stream_bounded(data, MAX_DECOMPRESSED_SIZE)
+}
+
+/// [`decompress_stream`]의 상한 지정 버전. `Read::take(max + 1)`로 압축
+/// 해제 출력 크기를 제한한다(입력이 아니라 출력 바이트 기준).
+fn decompress_stream_bounded(data: &[u8], max: usize) -> Result<Vec<u8>, CfbError> {
+    use flate2::read::{DeflateDecoder, ZlibDecoder};
+
+    let cap = (max as u64).saturating_add(1);
+    let bomb_err = || {
+        CfbError::DecompressError(format!(
+            "압축 해제 크기가 {} 바이트 상한을 초과 (압축 해제 폭탄 가능성)",
+            max
+        ))
+    };
+
     // raw deflate (wbits=-15) 시도
-    use flate2::read::DeflateDecoder;
     let mut decoder = DeflateDecoder::new(data);
     let mut decompressed = Vec::new();
-    match decoder.read_to_end(&mut decompressed) {
+    match decoder.take(cap).read_to_end(&mut decompressed) {
+        Ok(_) if decompressed.len() > max => return Err(bomb_err()),
         Ok(_) => return Ok(decompressed),
         Err(_) => {}
     }
 
     // 표준 zlib 시도
-    use flate2::read::ZlibDecoder;
     let mut decoder = ZlibDecoder::new(data);
     let mut decompressed = Vec::new();
-    match decoder.read_to_end(&mut decompressed) {
+    match decoder.take(cap).read_to_end(&mut decompressed) {
+        Ok(_) if decompressed.len() > max => Err(bomb_err()),
         Ok(_) => Ok(decompressed),
         Err(e) => Err(CfbError::DecompressError(e.to_string())),
     }
@@ -674,6 +705,48 @@ mod tests {
     fn test_decompress_invalid_data() {
         let result = decompress_stream(&[0xFF, 0xFF, 0xFF]);
         assert!(result.is_err());
+    }
+
+    /// 상한 아래로 정상 압축 해제되는 스트림은 그대로 통과해야 한다.
+    #[test]
+    fn test_decompress_under_cap() {
+        use flate2::write::DeflateEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let payload = vec![b'A'; 4096];
+        let mut enc = DeflateEncoder::new(Vec::new(), Compression::best());
+        enc.write_all(&payload).unwrap();
+        let compressed = enc.finish().unwrap();
+
+        let result = decompress_stream_bounded(&compressed, 1024 * 1024).unwrap();
+        assert_eq!(result, payload);
+    }
+
+    /// 상한을 초과해 팽창하는 raw deflate 스트림("압축 해제 폭탄")은
+    /// `DecompressError`로 거부되어야 한다. 압축본은 수십 바이트지만
+    /// 압축 해제 시도는 상한(여기선 1 KiB)에 걸린다.
+    #[test]
+    fn test_decompress_bomb_rejected() {
+        use flate2::write::DeflateEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        // 반복 패턴 → 매우 높은 압축률
+        let payload = vec![b'A'; 1024 * 1024];
+        let mut enc = DeflateEncoder::new(Vec::new(), Compression::best());
+        enc.write_all(&payload).unwrap();
+        let compressed = enc.finish().unwrap();
+        assert!(compressed.len() < 4096, "bomb compressed too large");
+
+        let result = decompress_stream_bounded(&compressed, 1024);
+        assert!(result.is_err(), "bomb stream should be rejected");
+        match result.unwrap_err() {
+            CfbError::DecompressError(msg) => {
+                assert!(msg.contains("상한") || msg.contains("폭탄"), "unexpected: {}", msg);
+            }
+            other => panic!("expected DecompressError, got {:?}", other),
+        }
     }
 
     #[test]
@@ -699,10 +772,11 @@ mod tests {
         let cli_path = "samples/20250130-hongbo_saved.hwp";
         let browser_path = "samples/honbo-save.hwp";
 
-        let cli_data = std::fs::read(cli_path)
-            .unwrap_or_else(|e| panic!("CLI 파일 읽기 실패: {} - {}", cli_path, e));
-        let browser_data = std::fs::read(browser_path)
-            .unwrap_or_else(|e| panic!("Browser 파일 읽기 실패: {} - {}", browser_path, e));
+        let (Ok(cli_data), Ok(browser_data)) =
+            (std::fs::read(cli_path), std::fs::read(browser_path))
+        else {
+            return; // 로컬 전용 샘플 없으면 스킵 (samples/ 는 gitignore)
+        };
 
         println!("\n{}", "=".repeat(60));
         println!("  CFB Stream Structure Comparison");

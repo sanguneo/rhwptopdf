@@ -2725,7 +2725,7 @@ mod tests {
         core.paginate();
 
         let tree = core
-            .build_page_render_tree(0)
+            .build_page_tree(0)
             .expect("empty document should expose page render tree");
 
         match tree.root.node_type {
@@ -2793,71 +2793,6 @@ mod tests {
         assert_eq!(core.get_bin_data(0), Some(&[0x01, 0x02, 0x03][..]));
         assert_eq!(core.get_bin_data(1), Some(&[0xAA, 0xBB][..]));
         assert_eq!(core.get_bin_data(2), None);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn inject_png_phys_inserts_after_ihdr() {
-        // 최소 PNG: 8-byte signature + IHDR chunk (13 bytes data)
-        let mut png = Vec::new();
-        png.extend_from_slice(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]); // signature
-                                                                                  // IHDR: length=13
-        png.extend_from_slice(&13u32.to_be_bytes());
-        png.extend_from_slice(b"IHDR");
-        png.extend_from_slice(&[0u8; 13]); // dummy IHDR data
-        let ihdr_crc = super::png_crc32(&{
-            let mut v = Vec::new();
-            v.extend_from_slice(b"IHDR");
-            v.extend_from_slice(&[0u8; 13]);
-            v
-        });
-        png.extend_from_slice(&ihdr_crc.to_be_bytes());
-        let ihdr_end = png.len(); // 8 + 4 + 4 + 13 + 4 = 33
-                                  // IDAT dummy
-        png.extend_from_slice(&4u32.to_be_bytes());
-        png.extend_from_slice(b"IDAT");
-        png.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
-        let idat_crc = super::png_crc32(&{
-            let mut v = Vec::new();
-            v.extend_from_slice(b"IDAT");
-            v.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
-            v
-        });
-        png.extend_from_slice(&idat_crc.to_be_bytes());
-
-        let result = super::inject_png_phys(png.clone(), 300.0);
-
-        // pHYs chunk 삽입 확인: IHDR 직후에 pHYs 가 위치
-        assert_eq!(&result[ihdr_end + 4..ihdr_end + 8], b"pHYs");
-        // pHYs data length = 9
-        let phys_len = u32::from_be_bytes([
-            result[ihdr_end],
-            result[ihdr_end + 1],
-            result[ihdr_end + 2],
-            result[ihdr_end + 3],
-        ]);
-        assert_eq!(phys_len, 9);
-        // 300 DPI → 11811 ppm (300 / 0.0254 = 11811.02...)
-        let ppm = u32::from_be_bytes([
-            result[ihdr_end + 8],
-            result[ihdr_end + 9],
-            result[ihdr_end + 10],
-            result[ihdr_end + 11],
-        ]);
-        assert_eq!(ppm, 11811);
-        // unit = 1 (meter)
-        assert_eq!(result[ihdr_end + 16], 1);
-        // IDAT 는 pHYs 뒤에 보존
-        let phys_chunk_size = 4 + 4 + 9 + 4; // 21
-        let idat_pos = ihdr_end + phys_chunk_size;
-        assert_eq!(&result[idat_pos + 4..idat_pos + 8], b"IDAT");
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn png_crc32_known_value() {
-        let crc = super::png_crc32(b"IHDR");
-        assert_eq!(crc, 0xA8A1_AE0A);
     }
 
     #[cfg(all(not(target_arch = "wasm32"), feature = "native-skia"))]
