@@ -61,6 +61,37 @@ pub(crate) fn alloc_record_buf(length: usize) -> Result<Vec<u8>, io::Error> {
     Ok(vec![0u8; length])
 }
 
+/// HWP3 본문(raw deflate) 압축 해제. 출력 크기를 `max` 바이트로 제한한다
+/// (입력이 아니라 출력 바이트 기준). 수 KB 짜리 스트림이 수 GB 로 팽창하는
+/// "압축 해제 폭탄"이 무제한 `read_to_end` 로 32-bit WASM 호스트를 OOM 시키는
+/// 것을 막는다. CFB 경로의 `cfb_reader::decompress_stream` 과 동일한 방어이며,
+/// 상한 초과 시 `InvalidData` 로 graceful 하게 거부한다.
+pub(crate) fn decompress_hwp3_body_bounded(
+    data: &[u8],
+    max: usize,
+) -> Result<Vec<u8>, Hwp3Error> {
+    use flate2::read::DeflateDecoder;
+
+    let cap = (max as u64).saturating_add(1);
+    let mut decompressed = Vec::new();
+    DeflateDecoder::new(data)
+        .take(cap)
+        .read_to_end(&mut decompressed)
+        .map_err(|e| Hwp3Error::IoError { source: e })?;
+    if decompressed.len() > max {
+        return Err(Hwp3Error::IoError {
+            source: io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "HWP3 본문 압축 해제 크기가 {} 바이트 상한을 초과 (압축 해제 폭탄 가능성)",
+                    max
+                ),
+            ),
+        });
+    }
+    Ok(decompressed)
+}
+
 /// 외부 입력 count (예: `point_count: u32`) 를 `Vec::with_capacity` 인자로 쓰기 전 검증.
 /// count > cap 일 때 graceful Err 반환 (#877).
 pub(crate) fn check_record_count(count: usize) -> Result<(), io::Error> {
@@ -2540,11 +2571,7 @@ pub fn parse_hwp3(data: &[u8]) -> Result<Document, Hwp3Error> {
 
     let mut decompressed_data = Vec::new();
     let body_data = if doc_info.compressed != 0 {
-        use flate2::read::DeflateDecoder;
-        let mut decoder = DeflateDecoder::new(remaining_data);
-        decoder
-            .read_to_end(&mut decompressed_data)
-            .map_err(|e| Hwp3Error::IoError { source: e })?;
+        decompressed_data = decompress_hwp3_body_bounded(remaining_data, HWP3_MAX_RECORD_SIZE)?;
         &decompressed_data[..]
     } else {
         remaining_data
@@ -3259,6 +3286,51 @@ mod tests {
         let r = alloc_record_buf(1024);
         assert!(r.is_ok());
         assert_eq!(r.unwrap().len(), 1024);
+    }
+
+    #[test]
+    fn test_hwp3_body_decompress_under_cap_ok() {
+        // 상한 아래로 정상 압축 해제되는 raw deflate 본문은 그대로 통과.
+        use flate2::write::DeflateEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let payload = vec![b'A'; 4096];
+        let mut enc = DeflateEncoder::new(Vec::new(), Compression::best());
+        enc.write_all(&payload).unwrap();
+        let compressed = enc.finish().unwrap();
+
+        let out = decompress_hwp3_body_bounded(&compressed, 1024 * 1024).unwrap();
+        assert_eq!(out, payload);
+    }
+
+    #[test]
+    fn test_hwp3_body_decompress_bomb_rejected() {
+        // [압축 해제 폭탄] 수십 바이트 raw deflate 가 상한(여기선 1 KiB)을 넘게
+        // 팽창하면 graceful InvalidData Err 로 거부되어야 한다 (32-bit WASM OOM 방지).
+        use flate2::write::DeflateEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let payload = vec![b'A'; 1024 * 1024];
+        let mut enc = DeflateEncoder::new(Vec::new(), Compression::best());
+        enc.write_all(&payload).unwrap();
+        let compressed = enc.finish().unwrap();
+        assert!(compressed.len() < 4096, "bomb compressed too large");
+
+        let r = decompress_hwp3_body_bounded(&compressed, 1024);
+        assert!(r.is_err(), "bomb body should be rejected");
+        let e = r.unwrap_err();
+        match e {
+            Hwp3Error::IoError { source } => {
+                assert_eq!(source.kind(), std::io::ErrorKind::InvalidData);
+                assert!(
+                    format!("{source}").contains("상한"),
+                    "unexpected: {source}"
+                );
+            }
+            other => panic!("expected IoError, got {other:?}"),
+        }
     }
 
     #[test]
