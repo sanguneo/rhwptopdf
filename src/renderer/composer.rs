@@ -1732,6 +1732,4 @@ pub(crate) use line_breaking::{
 #[cfg(test)]
 mod lineseg_compare_tests;
 #[cfg(test)]
-mod re_sample_gen;
-#[cfg(test)]
 mod tests;

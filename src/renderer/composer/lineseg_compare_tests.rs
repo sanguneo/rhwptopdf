@@ -726,8 +726,10 @@ mod tests {
 
     #[test]
     fn test_lineseg_compare_hancom_saved() {
-        let mut pairs: Vec<(String, String)> = std::fs::read_dir("samples/")
-            .unwrap()
+        let Ok(entries) = std::fs::read_dir("samples/") else {
+            return; // samples/ 없으면 스킵
+        };
+        let mut pairs: Vec<(String, String)> = entries
             .filter_map(|e| e.ok())
             .filter_map(|e| {
                 let name = e.file_name().to_string_lossy().to_string();
