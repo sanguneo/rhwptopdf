@@ -5,6 +5,33 @@ All notable changes to **rhwptopdf** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-08-14
+
+Robustness and text-fidelity release.
+
+### Added
+
+- Verified Hancom PUA display table (`src/renderer/hancom_pua.rs`): 12
+  Hancom-PDF-verified private-use codepoints now project to public-font
+  glyphs during paint and width measurement (adds the `▸ ► ■ ↵` bullets and
+  the `한글과컴퓨터` header glyphs). Previously only two codepoints were
+  mapped and the rest rendered as tofu or a wrong bullet.
+- CI now runs the test suite (`cargo test`) on every push and pull request,
+  not just the native and WebAssembly builds.
+
+### Security
+
+- Bounded HWP3 body decompression output at `HWP3_MAX_RECORD_SIZE` (256 MiB)
+  via `Read::take`, rejecting a decompression bomb instead of inflating a
+  few-KB stream to gigabytes and OOM-killing the 32-bit WebAssembly host.
+  This closes the last unbounded inflate after the CFB
+  (`MAX_DECOMPRESSED_SIZE`) and HWPX (`MAX_BINDATA_SIZE`) guards.
+
+### Fixed
+
+- Repaired the `cargo test --lib` target and made sample-dependent tests
+  skip cleanly when the gitignored `samples/` directory is absent.
+
 ## [0.1.0] - 2026-05-29
 
 Initial release. HWP/HWPX → multi-page PDF conversion in the browser via

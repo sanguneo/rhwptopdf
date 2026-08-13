@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   rust:
-    name: Rust (cargo build + policy tests)
+    name: Rust (build + test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +36,9 @@ jobs:
 
       - name: cargo build (native)
         run: cargo build --verbose
+
+      - name: cargo test (native)
+        run: cargo test --verbose
 
       - name: cargo build (wasm32-unknown-unknown)
         run: cargo build --target wasm32-unknown-unknown --verbose
