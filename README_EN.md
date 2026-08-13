@@ -154,12 +154,16 @@ a minimal package that adds one thing: a PDF output pipeline.
             │ (Apache-2.0)
             │
             ▼ cherry-pick parser/ + parts of renderer/
-2026-05   rhwptopdf v0.1.0  ← you are here
+2026-05   rhwptopdf v0.1.0
             │ + svg2pdf + pdf-writer to assemble multi-page PDFs
             │ + Font Access API integration (system fonts first, static fallback)
             │ + wasm-pack UMD bundle + browser demo (GitHub Pages)
             │ + slimmed down: removed editor, diagnostics, CLI tooling
             │ (MIT — Apache-2.0 attribution preserved in NOTICE)
+            │
+2026-08   rhwptopdf v0.2.0  ← you are here
+            │ + decompression-bomb guards (HWP3/CFB/HWPX output caps)
+            │ + verified Hancom PUA symbol fidelity
             ▼
         Browser-only HWP → PDF converter — one `.umd.js` + one `.wasm`
 ```

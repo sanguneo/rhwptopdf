@@ -150,12 +150,16 @@ HWP/HWPX parser + layout renderer 를 cherry-pick 한 **별개 트랙** 입니�
             │ (Apache-2.0)
             │
             ▼ parser/ + renderer/ 일부 cherry-pick
-2026-05   rhwptopdf v0.1.0  ← 여기
+2026-05   rhwptopdf v0.1.0
             │ + svg2pdf + pdf-writer 로 multi-page PDF 조립
             │ + Font Access API 통합 (시스템 폰트 우선, 정적 fallback)
             │ + wasm-pack UMD 번들 + 브라우저 데모 (GitHub Pages)
             │ + 라이브러리 외 코드 (편집, 진단, CLI 도구 등) 슬림화
             │ (MIT — 단, NOTICE 의 rhwp Apache-2.0 attribution 보존)
+            │
+2026-08   rhwptopdf v0.2.0  ← 여기
+            │ + 압축 해제 폭탄 방어 (HWP3·CFB·HWPX 출력 상한)
+            │ + 한컴 PUA 표시 기호 정합 (검증 표)
             ▼
         브라우저-only HWP → PDF 변환기 ─ 단일 `.umd.js` + `.wasm`
 ```

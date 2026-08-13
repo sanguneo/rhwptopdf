@@ -72,7 +72,6 @@ Rust → WebAssembly, with an in-tree demo page.
 - MIT `LICENSE`; upstream rhwp Apache-2.0 attribution preserved in
   `NOTICE` (parser + renderer modules are a cherry-pick from
   https://github.com/edwardkim/rhwp).
-- Cargo policy tests: `tests/no_rhwp_dependency.rs`,
-  `tests/license_attribution.rs`.
 
+[0.2.0]: https://github.com/sanguneo/rhwptopdf/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sanguneo/rhwptopdf/releases/tag/v0.1.0
