@@ -4,6 +4,8 @@
 // 초기화 후 wrapped 함수는 `RhwpToPdf` 자체의 own property 로 붙으므로
 // 항상 `RhwpToPdf.analyzeHwp(...)` / `RhwpToPdf.hwpToPdf(...)` 식으로 호출한다.
 
+import { selectSystemFontCandidates } from "./font-loader.js";
+
 // ─── DOM ───────────────────────────────────────────────────────────
 const statusEl = document.querySelector("#status");
 const statusDotEl = document.querySelector("#status-dot");
@@ -217,19 +219,6 @@ async function querySystemFonts() {
   }
 }
 
-function findSystemMatch(systemFonts, family) {
-  for (const fd of systemFonts) {
-    if (
-      fd.family === family ||
-      fd.fullName === family ||
-      fd.postscriptName === family
-    ) {
-      return fd;
-    }
-  }
-  return null;
-}
-
 async function fetchStaticBytes(url) {
   if (fontBytesCache.has(url)) return fontBytesCache.get(url);
   const res = await fetch(url);
@@ -248,25 +237,29 @@ async function loadFontsFor(fontsRequired) {
   const systemFonts = await querySystemFonts();
   RhwpToPdf.clearPdfFonts?.();
 
-  const systemMatched = [];
+  const systemMatched = selectSystemFontCandidates(
+    systemFonts,
+    Array.from(fontsRequired ?? []),
+  );
   const staticMatched = new Set();
   const unmatched = [];
+  let registeredFonts = 0;
 
   for (const family of fontsRequired ?? []) {
-    const sys = findSystemMatch(systemFonts, family);
-    if (sys) { systemMatched.push({ family, fd: sys }); continue; }
+    if (systemMatched.some(({ family: matched }) => matched === family)) continue;
     const url = STATIC_FONT_MAP[family];
     if (url) { staticMatched.add(url); continue; }
     unmatched.push(family);
   }
 
-  for (const { family, fd } of systemMatched) {
+  for (const { family, font } of systemMatched) {
     try {
-      const blob = await fd.blob();
+      const blob = await font.blob();
       const buf = await blob.arrayBuffer();
       const detected = RhwpToPdf.registerPdfFont(new Uint8Array(buf));
+      registeredFonts += 1;
       log(
-        `시스템 폰트: "${family}" → ${fd.fullName} (${buf.byteLength.toLocaleString()} bytes, family="${detected}")`,
+        `시스템 폰트: "${family}" → ${font.fullName} (${buf.byteLength.toLocaleString()} bytes, family="${detected}")`,
       );
     } catch (e) {
       log(`시스템 폰트 "${family}" 로드 실패: ${e.message}`);
@@ -276,6 +269,7 @@ async function loadFontsFor(fontsRequired) {
     try {
       const bytes = await fetchStaticBytes(url);
       const detected = RhwpToPdf.registerPdfFont(bytes);
+      registeredFonts += 1;
       log(
         `정적 폰트 등록: ${url} (${bytes.byteLength.toLocaleString()} bytes, family="${detected}")`,
       );
@@ -283,16 +277,22 @@ async function loadFontsFor(fontsRequired) {
       log(`정적 폰트 로드 실패 ${url}: ${e.message}`);
     }
   }
-  if (unmatched.length > 0 && !staticMatched.has(STATIC_FALLBACK_URL)) {
+  if (registeredFonts === 0 && !staticMatched.has(STATIC_FALLBACK_URL)) {
     try {
       const bytes = await fetchStaticBytes(STATIC_FALLBACK_URL);
       const detected = RhwpToPdf.registerPdfFont(bytes);
+      registeredFonts += 1;
       log(
         `미매칭 → fallback (${unmatched.join(", ")}): ${STATIC_FALLBACK_URL}, family="${detected}"`,
       );
     } catch (e) {
       log(`fallback 로드 실패: ${e.message}`);
     }
+  }
+  if (registeredFonts === 0) {
+    throw new Error(
+      "PDF 글꼴을 등록하지 못했습니다. 브라우저의 로컬 글꼴 권한을 허용해 주세요.",
+    );
   }
   if (typeof RhwpToPdf.pdfFontStatus === "function") {
     log(`PDF fontdb 상태: ${RhwpToPdf.pdfFontStatus()}`);

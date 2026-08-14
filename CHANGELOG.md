@@ -5,6 +5,19 @@ All notable changes to **rhwptopdf** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-08-14
+
+Local-font fallback reliability release.
+
+### Fixed
+
+- Restored visible PDF text when a document's requested font family does not
+  exactly match an installed system font. The browser demo now selects a known
+  Korean fallback such as `Malgun Gothic`, registers it with the WASM PDF
+  fontdb, and refuses to emit a silently blank PDF when no font can be loaded.
+- Added a deterministic regression test for the local Korean fallback
+  selection path.
+
 ## [0.2.0] - 2026-08-14
 
 Robustness and text-fidelity release.
@@ -73,5 +86,6 @@ Rust → WebAssembly, with an in-tree demo page.
   `NOTICE` (parser + renderer modules are a cherry-pick from
   https://github.com/edwardkim/rhwp).
 
+[0.2.1]: https://github.com/sanguneo/rhwptopdf/releases/tag/v0.2.1
 [0.2.0]: https://github.com/sanguneo/rhwptopdf/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sanguneo/rhwptopdf/releases/tag/v0.1.0
