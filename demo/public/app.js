@@ -4,7 +4,11 @@
 // 초기화 후 wrapped 함수는 `RhwpToPdf` 자체의 own property 로 붙으므로
 // 항상 `RhwpToPdf.analyzeHwp(...)` / `RhwpToPdf.hwpToPdf(...)` 식으로 호출한다.
 
-import { selectSystemFontCandidates } from "./font-loader.js";
+import {
+  isKoreanCapableFamily,
+  requiresKorean,
+  selectSystemFontCandidates,
+} from "./font-loader.js";
 
 // ─── DOM ───────────────────────────────────────────────────────────
 const statusEl = document.querySelector("#status");
@@ -244,6 +248,7 @@ async function loadFontsFor(fontsRequired) {
   const staticMatched = new Set();
   const unmatched = [];
   let registeredFonts = 0;
+  let koreanRegistered = false;
 
   for (const family of fontsRequired ?? []) {
     if (systemMatched.some(({ family: matched }) => matched === family)) continue;
@@ -258,6 +263,7 @@ async function loadFontsFor(fontsRequired) {
       const buf = await blob.arrayBuffer();
       const detected = RhwpToPdf.registerPdfFont(new Uint8Array(buf));
       registeredFonts += 1;
+      if (isKoreanCapableFamily(family)) koreanRegistered = true;
       log(
         `시스템 폰트: "${family}" → ${font.fullName} (${buf.byteLength.toLocaleString()} bytes, family="${detected}")`,
       );
@@ -270,6 +276,7 @@ async function loadFontsFor(fontsRequired) {
       const bytes = await fetchStaticBytes(url);
       const detected = RhwpToPdf.registerPdfFont(bytes);
       registeredFonts += 1;
+      koreanRegistered = true;
       log(
         `정적 폰트 등록: ${url} (${bytes.byteLength.toLocaleString()} bytes, family="${detected}")`,
       );
@@ -277,11 +284,18 @@ async function loadFontsFor(fontsRequired) {
       log(`정적 폰트 로드 실패 ${url}: ${e.message}`);
     }
   }
-  if (registeredFonts === 0 && !staticMatched.has(STATIC_FALLBACK_URL)) {
+  // 글꼴이 하나도 없거나, 한글 문서인데 한글 커버리지가 없으면 정적 폴백을 시도.
+  const needsKorean = requiresKorean(fontsRequired);
+  const koreanMissing = needsKorean && !koreanRegistered;
+  if (
+    (registeredFonts === 0 || koreanMissing) &&
+    !staticMatched.has(STATIC_FALLBACK_URL)
+  ) {
     try {
       const bytes = await fetchStaticBytes(STATIC_FALLBACK_URL);
       const detected = RhwpToPdf.registerPdfFont(bytes);
       registeredFonts += 1;
+      koreanRegistered = true;
       log(
         `미매칭 → fallback (${unmatched.join(", ")}): ${STATIC_FALLBACK_URL}, family="${detected}"`,
       );
@@ -292,6 +306,12 @@ async function loadFontsFor(fontsRequired) {
   if (registeredFonts === 0) {
     throw new Error(
       "PDF 글꼴을 등록하지 못했습니다. 브라우저의 로컬 글꼴 권한을 허용해 주세요.",
+    );
+  }
+  if (needsKorean && !koreanRegistered) {
+    throw new Error(
+      "한글 글꼴을 등록하지 못해 본문이 빈 글리프로 렌더됩니다. " +
+        "로컬 글꼴 권한을 허용하거나 demo/public/fonts 에 한글 폰트를 두세요.",
     );
   }
   if (typeof RhwpToPdf.pdfFontStatus === "function") {

@@ -5,6 +5,22 @@ All notable changes to **rhwptopdf** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-08-24
+
+Korean local-font coverage fix for the browser demo.
+
+### Fixed
+
+- A single matching Latin family (for example `Palatino Linotype`) no longer
+  masks the Korean fallback: `selectSystemFontCandidates` now appends an
+  installed Korean family instead of replacing the match set, so a document
+  requesting `함초롬바탕` / `HY헤드라인M` renders real glyphs instead of tofu.
+- The demo refuses to report success when a Hangul document ends up with no
+  Korean-capable font registered, instead of emitting a blank-glyph PDF.
+- Verified end to end in Chromium with the Font Access API granted: fontdb goes
+  from `{"count":1,"sansSerif":"Palatino Linotype"}` to
+  `{"count":2,"sansSerif":"Malgun Gothic"}` and both pages render Korean text.
+
 ## [0.2.1] - 2026-08-14
 
 Local-font fallback reliability release.
